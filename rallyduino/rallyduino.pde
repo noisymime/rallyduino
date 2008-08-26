@@ -4,6 +4,7 @@
 #include <EEPROM.h>
 #include "floatToString.h"
 #include "TimerOne.h"
+#include "LCD_117.h"
 
 #define PROBE_PIN 0 //Actually equals digital pin 2
 #define MM_IN_KM 1000000 // Number of mm in a kilometre
@@ -59,13 +60,13 @@ void setup()
   
   //calibrate(); //Run through the calibration routine
   setup_lcd();
-  draw_headings();
+  draw_primary_headings();
+  draw_secondary_headings();
   //attachInterrupt(PROBE_PIN, pulse, RISING); //Attach the interrupt that gets called every time there is a pulse
   //Use the Timer1 library to simulate pulses
   Timer1.initialize(); // initialize timer1
   Timer1.attachInterrupt(pulse, 8000); //Pulse every 8ms. Simulates 160km/h on 185/60R13 tire, 4 wheel studs
   
-  //Serial.print("?f"); //Clear LCD
   delay(50);
 }
 
@@ -86,17 +87,18 @@ void loop()
   //process_input();
   
   LOOP_COUNTER++;
-  //We only do a screen redraw once every 10 loops
+  //We only do a screen redraw once every 20 loops
   //This means we get sufficiently up to date data displayed, but do not flood the LCD
-  //Note that cursor movements / button presses still update frequently as they are part of process_input()
-  if( (LOOP_COUNTER % 10) == 0)
+  //Note that cursor movements / button presses still update frequently as they are part of decode_nunchuck()
+  if( (LOOP_COUNTER % 20) == 0)
   {
     redraw_lcd();
     LOOP_COUNTER = 0;
-    delay(100);
+    //delay(100);
   }
   
-  delay(10); //Delaying as we only need to refresh about this often. Gives the interrupts time to work
+  delay(10);
+
 }
 
 //Runs through the calibration process
@@ -182,89 +184,47 @@ void setup_lcd()
   ----------------------
   */
   
-  //Define custom characters
-  Serial.print("?D1040E150404040404"); //Up arrow (Custom character #1)
-  delay(100);
-  Serial.print("?D20404040404150E04"); //Down arrow (Custom character #2)
-  delay(200);
-  Serial.print("?D31B110A1B1B1B1B1B"); //Inverted Up arrow (Custom character #3)
-  delay(200);
-  Serial.print("?D41B1B1B1B1B0A111B"); //Inverted Down arrow (Custom character #4)
-  delay(100);
-  Serial.print("?D50804021F1F020408"); //Right facing arrow (Custom character #5)
-  delay(100);
-  Serial.print("?D60204081F1F080402"); //Left facing arrow (Custom character #6)
-  delay(100);
-  
-  Serial.print("?f"); //Clear LCD
-  delay(100);
+  LCD_set_custom_characters();
+  LCD_clear();
   
 }
 
-void draw_headings()
+//Draws the headings on rows 1 and 3
+void draw_primary_headings()
 {
-  //Serial.print("?c0"); //Set cursor to none
-  //delay(100);
   
   //Start Drawing headings
-  Serial.print("?x00");
-  Serial.print("?y0"); //(0, 0)
-  delay(50);
-  if(SHOW_TIME_COUNT1) { Serial.print("Dist1          Time"); }
-  else { Serial.print("Dist1        Avg.Sp"); }
-  delay(50);
-  
-  //Put the headings on the 2nd line
-  draw_distance_headers(1);
-  Serial.print(" ");
-  delay(50);
-  if(DIR_FORWARD_COUNT1) { Serial.print("?3"); }
-  else { Serial.print("?4"); }
-  delay(50);
+  char headings1[20];
+  //sprintf(headings1, "Dist1        %s", (SHOW_TIME_COUNT1?"  Time":"Avg.Sp"));
+  if(SHOW_TIME_COUNT1) { strcpy(headings1, "Dist1          Time"); }
+  else { strcpy(headings1, "Dist1        Avg.Sp"); }
+  LCD_print_string_with_coords(headings1, 0, 0);
   
   //Headings on 3rd row
-  Serial.print("?x00");
-  Serial.print("?y2"); //(0, 2)
-  delay(50);
-  if(SHOW_TIME_COUNT2) { Serial.print("Dist2          Time"); }
-  else { Serial.print("Dist2        Avg.Sp"); }
-  delay(50);
-  
-  draw_distance_headers(2);
-  Serial.print(" ");
-  delay(50);
-  if(DIR_FORWARD_COUNT2) { Serial.print("?3"); }
-  else { Serial.print("?4"); }
-  delay(50);
+  char headings2[20];
+  if(SHOW_TIME_COUNT2) { strcpy(headings2, "Dist2          Time"); }
+  else { strcpy(headings2, "Dist2        Avg.Sp"); }
+  LCD_print_string_with_coords(headings2, 0, 2);
+
 }
 
-void draw_distance_headers(int count_num)
+//Draws the headings on rows 2 and 4
+void draw_secondary_headings()
 {
-  boolean use_miles;
+ 
+  char heading2[6];
+  char heading4[6];
   
-  Serial.print("?x07");
-  if (count_num == 1) 
-  {
-    Serial.print("?y1");
-    use_miles = USE_MILES_COUNT1;
-  }
-  else 
-  {
-    Serial.print("?y3");
-    use_miles = USE_MILES_COUNT2;
-  }
+  sprintf(heading2, "%s %s", (USE_MILES_COUNT1?"Mi":"Km"), (DIR_FORWARD_COUNT1?LCD_ARROW_UP:LCD_ARROW_DOWN));
+  sprintf(heading4, "%s %s", (USE_MILES_COUNT2?"Mi":"Km"), (DIR_FORWARD_COUNT2?LCD_ARROW_UP:LCD_ARROW_DOWN));
   
-  if (use_miles) { Serial.print("mi"); }
-  else { Serial.print("km"); }
-  
-  delay(50);
+  LCD_print_string_with_coords(heading2, 7, 1);
+  LCD_print_string_with_coords(heading4, 7, 3);
+
 }
 
 void redraw_lcd()
 {
-  //Move cursor to (0, 1)
-  //Serial.print("?c0");
-  //delay(50);
   
   //Calculate and print distance info (in km)
   float distance_1 = float(count1 * CALIBRATOR) / float(MM_IN_KM);
@@ -277,19 +237,12 @@ void redraw_lcd()
   char distance2_string[7];
   
   //Set position and print distance 1
-  Serial.print("?x00");
-  Serial.print("?y1"); //(0, 1)
-  delay(50);
-  Serial.print(floatToString(distance1_string, distance_1, 2)); 
-  delay(50);
-
+  floatToString(distance1_string, distance_1, 2);
+  LCD_print_string_with_coords(distance1_string, 0, 1);
+  
   //Set position and print distance 2  
-  Serial.print("?x00");
-  Serial.print("?y3"); //(0, 3)
-  delay(50);
-  //Serial.print(count2);
-  Serial.print(floatToString(distance2_string, distance_2, 2));
-  delay(50); 
+  floatToString(distance2_string, distance_2, 2);
+  LCD_print_string_with_coords(distance2_string, 0, 3);
   
   //Calculate and print time or avg speed info
   //First get the current time in ms (Minus the last time the counter was reset)
@@ -306,13 +259,7 @@ void redraw_lcd()
     char cur_time1_str[9];
     
     sprintf(cur_time1_str, "%1d:%02d:%02d", hours1, mins1, secs1);
-    
-    //Print times out to LCD
-    Serial.print("?x13");
-    Serial.print("?y1");
-    delay(50);
-    Serial.print(cur_time1_str); //(12, 1)
-    delay(50);
+    LCD_print_string_with_coords(cur_time1_str, 13, 1);
   }
   else
   {
@@ -321,12 +268,8 @@ void redraw_lcd()
     float avg_speed1 = float(distance_1) / float(hours1);
     
     char avg_speed1_string[7]; //String buffer for the result
-    
-    Serial.print("?x14");
-    Serial.print("?y1");
-    delay(50);
-    Serial.print(floatToString(avg_speed1_string, avg_speed1, 2)); 
-    delay(50);
+    floatToString(avg_speed1_string, avg_speed1, 2);
+    LCD_print_string_with_coords(avg_speed1_string, 14, 1);
   }
   
   if(SHOW_TIME_COUNT2)
@@ -339,13 +282,7 @@ void redraw_lcd()
     char cur_time2_str[9];
   
     sprintf(cur_time2_str, "%1d:%02d:%02d", hours2, mins2, secs2);
-    
-    Serial.print("?x13");
-    Serial.print("?y3");
-    delay(50);
-    Serial.print(cur_time2_str); //(12, 3)
-    delay(50);
-    
+    LCD_print_string_with_coords(cur_time2_str, 13, 3);
   }
   else
   {
@@ -354,12 +291,8 @@ void redraw_lcd()
     float avg_speed2 = float(distance_2) / float(hours2);
     
     char avg_speed2_string[7]; //String buffer for the result
-    
-    Serial.print("?x14");
-    Serial.print("?y3");
-    delay(50);
-    Serial.print(floatToString(avg_speed2_string, avg_speed2, 2)); 
-    delay(50);
+    floatToString(avg_speed2_string, avg_speed2, 2);
+    LCD_print_string_with_coords(avg_speed2_string, 14, 3);
   }
   
 }
@@ -418,43 +351,35 @@ void update_nunchuck_zbutton()
         break;
       case 3:
         USE_MILES_COUNT1 = !USE_MILES_COUNT1;
-        draw_distance_headers(1);
+        draw_secondary_headings();
         break;
       case 4:
         USE_MILES_COUNT2 = !USE_MILES_COUNT2;
-        draw_distance_headers(2);
+        draw_secondary_headings();
         break;
       case 5:
         DIR_FORWARD_COUNT1 = !DIR_FORWARD_COUNT1;
-        draw_headings();
-        set_cursor_pos(CURSOR_POS);
+        draw_secondary_headings();
         break;
       case 6:
         DIR_FORWARD_COUNT2 = !DIR_FORWARD_COUNT2;
-        draw_headings();
-        set_cursor_pos(CURSOR_POS);
+        draw_secondary_headings();
         break;
       case 7:
         //Switch count1 between time and average speed
         SHOW_TIME_COUNT1 = !SHOW_TIME_COUNT1;
-        draw_headings(); //Redraw headings do to change
+        draw_primary_headings(); //Redraw headings do to change
         set_cursor_pos(CURSOR_POS);
-        Serial.print("?x13");
-        Serial.print("?y1");
-        delay(50);
-        Serial.print(" "); 
-        delay(50);
+        //Need to clear the first character from avg speed/time 
+        LCD_print_string_with_coords(" ", 13, 1);
         break;
       case 8:
         //Switch count2 between time and average speed
         SHOW_TIME_COUNT2 = !SHOW_TIME_COUNT2;
-        draw_headings(); //Redraw headings do to change
+        draw_primary_headings(); //Redraw headings do to change
         set_cursor_pos(CURSOR_POS);
-        Serial.print("?x13");
-        Serial.print("?y3");
-        delay(50);
-        Serial.print(" "); 
-        delay(50);
+        //Need to clear the first character from avg speed/time 
+        LCD_print_string_with_coords(" ", 13, 3);
         break;
         
     }
@@ -472,99 +397,73 @@ void set_cursor_pos(int new_pos)
   |       2    |       |
   ----------------------
   */
-  //Quick sanity check
-  //if(new_pos == CURSOR_POS) { return; }
-  
+
+  //Need to clear the previous cursor position
+  int x, y;
   switch(CURSOR_POS)
   {
     case 1:
-      Serial.print("?x06");
-      Serial.print("?y1");
+      x = 6;
+      y = 1;
       break;
     case 2:
-      Serial.print("?x06");
-      Serial.print("?y3");
+      x = 6;
+      y = 3;
       break;
     case 3:
-       Serial.print("?x07");
-       Serial.print("?y0");
+       x = 7;
+       y = 0;
        break;
     case 4:
-       Serial.print("?x07");
-       Serial.print("?y2");
+       x = 7;
+       y = 2;
        break;
     case 5:
-       Serial.print("?x10");
-       Serial.print("?y0");
+       x = 10;
+       y = 0;
        break;
     case 6:
-       Serial.print("?x10");
-       Serial.print("?y2");
+       x = 10;
+       y = 2;
        break;
     case 7:
-       Serial.print("?x12");
-       Serial.print("?y0");
+       x = 12;
+       y = 0;
        break;
     case 8:
-       Serial.print("?x12");
-       Serial.print("?y2");
+       x = 12;
+       y = 2;
        break;
   }
-  delay(50);
-  Serial.print(" ");
+  LCD_print_string_with_coords(" ", x, y);
   
   switch(new_pos)
   {
     case 1:
-      Serial.print("?x06");
-      Serial.print("?y1");
-      delay(50);
-      Serial.print("?6");
+      LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 1);
       break;
     case 2:
-      Serial.print("?x06");
-      Serial.print("?y3");
-      delay(50);
-      Serial.print("?6");
+      LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 3);
       break;
     case 3:
-       Serial.print("?x07");
-       Serial.print("?y0");
-       delay(50);
-       Serial.print("?2");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 0);
+      break;
     case 4:
-       Serial.print("?x07");
-       Serial.print("?y2");
-       delay(50);
-       Serial.print("?2");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 2);
+      break;
     case 5:
-       Serial.print("?x10");
-       Serial.print("?y0");
-       delay(50);
-       Serial.print("?2");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 0);
+      break;
     case 6:
-       Serial.print("?x10");
-       Serial.print("?y2");
-       delay(50);
-       Serial.print("?2");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 2);
+      break;
     case 7:
-       Serial.print("?x12");
-       Serial.print("?y0");
-       delay(50);
-       Serial.print("?5");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 0);
+      break;
     case 8:
-       Serial.print("?x12");
-       Serial.print("?y2");
-       delay(50);
-       Serial.print("?5");
-       break;
+      LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 2);
+      break;
   }
-  delay(50);
   
   CURSOR_POS = new_pos;
 }
