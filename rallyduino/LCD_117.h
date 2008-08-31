@@ -43,9 +43,35 @@ void LCD_set_custom_characters()
   delay(100);
   Serial.print("?D60204081F1F080402"); //Left facing arrow (Custom character #6)
   delay(100);
+  
+  Serial.print("?c0"); //Set cursor to none mode
 }
 
+void LCD_big_number_mode(boolean is_big)
+{
+ if(is_big)
+ {
+   Serial.print("?>4"); //Enter big number (4) mode
+   delay(50);
+   Serial.print("?c2"); //Set cursor to blink mode
+   delay(50);
+   Serial.print("?f"); //Clear LCD
+   delay(50);
+ }
+ else
+ {
+   Serial.print("?c0"); //Set cursor to none mode
+   Serial.print("?<"); //Exit big number mode
+   Serial.print("?R"); //Restore custom characters
+   delay(50);
+ }
+}
 
+void LCD_print_int(int to_print)
+{
+  Serial.print(to_print);
+  delay(50);
+}
 
 void LCD_print_string_with_coords(char *string, int x, int y)
 {
@@ -56,5 +82,5 @@ void LCD_print_string_with_coords(char *string, int x, int y)
   delay(25);
   
   Serial.print(string);
-  delay(50); 
+  delay(40); 
 }
