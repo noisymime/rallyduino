@@ -54,12 +54,19 @@ int CURSOR_POS = 1;
 void setup()
 {
   Wire.begin ();		// join i2c bus with address 0x52
-  nunchuck_init (); // send the initilization handshake
-  
+  nunchuck_init (); // send the initilization handshake  
   Serial.begin(9600);
-  
-  //calibrate(); //Run through the calibration routine
   setup_lcd();
+  delay(50);
+  
+  
+  //Do a check to see if the C button is held down, if it is, start the calibration routine
+  decode_nunchuck(false);
+  delay(100);
+  if(NUNCHUCK_C_BUTTON) { calibrate(); }
+  //Attempt to set the calibrator number up, if this fails, run the calibration routine
+  else if(!set_calibrator()) { calibrate(); }
+  
   draw_primary_headings();
   draw_secondary_headings();
   //attachInterrupt(PROBE_PIN, pulse, RISING); //Attach the interrupt that gets called every time there is a pulse
@@ -83,14 +90,14 @@ void nunchuck_init ()
 int LOOP_COUNTER = 0;
 void loop()
 {
-  decode_nunchuck();
+  decode_nunchuck(true);
   //process_input();
   
   LOOP_COUNTER++;
   //We only do a screen redraw once every 20 loops
   //This means we get sufficiently up to date data displayed, but do not flood the LCD
   //Note that cursor movements / button presses still update frequently as they are part of decode_nunchuck()
-  if( (LOOP_COUNTER % 20) == 0)
+  if( (LOOP_COUNTER % 30) == 0)
   {
     redraw_lcd();
     LOOP_COUNTER = 0;
@@ -101,15 +108,39 @@ void loop()
 
 }
 
+/*
+Attempts to set the CALIBRATOR variable by looking up EEPROM.
+Returns true on success or false on fail
+*/
+boolean set_calibrator()
+{
+  //Attempt to get the calibration number from the EEPROM
+  //the first 4 bytes of the EEPROM are used to store the 4 digits of a calibration figure in the range 0000-9999
+  int cal_1 = int( EEPROM.read(0) );
+  int cal_2 = int( EEPROM.read(1) );
+  int cal_3 = int( EEPROM.read(2) );
+  int cal_4 = int( EEPROM.read(3) );
+  
+  //Do a check to see if any of the retrieved values are greater than 9. If yes, this means that the EEPROM is virgin, never been used before
+  //If this is the case, we reset the value to 0
+  if( cal_1 > 9) { cal_1 = 0; }
+  if( cal_2 > 9) { cal_2 = 0; }
+  if( cal_3 > 9) { cal_3 = 0; }
+  if( cal_4 > 9) { cal_4 = 0; }
+  
+   //If all 4 calibration figures are 0, then we've failed (Chances are this is a new arduino with no calibration number set)
+  if( (cal_1 + cal_2 + cal_3 + cal_4) == 0 ) { return false; }
+  
+  //Set the CALIBRATOR value based on each cal value
+  CALIBRATOR = (cal_1 * 1000) + (cal_2 * 100) + (cal_3 * 10) + cal_4;
+  
+  return true;
+}
+
 //Runs through the calibration process
 void calibrate()
 {
-  Serial.print("?>4"); //Enter big number (4) mode
-  delay(50);
-  Serial.print("?c2"); //Set cursor to blink mode
-  delay(50);
-  Serial.print("?f"); //Clear LCD
-  delay(50);
+  LCD_big_number_mode(true);
   
   //Attempt to get the calibration number from the EEPROM
   //the first 4 bytes of the EEPROM are used to store the 4 digits of a calibration figure in the range 0000-9999
@@ -126,39 +157,72 @@ void calibrate()
   if( cal_4 > 9) { cal_4 = 0; }
   
   //We create some new cal values, initial value is simply the original ones
+  int new_cal_values[] = {cal_1, cal_2, cal_3, cal_4};
+  /*
   int new_cal_1 = cal_1;
   int new_cal_2 = cal_2;
   int new_cal_3 = cal_3;
   int new_cal_4 = cal_4;
+  */
   
   int cur = 0; // Cursor position  
   //We run through a loop until the c button on the nunchuck is pressed
   boolean continue_check = true;
+  boolean changed = false;
   while (continue_check)
   {
-    decode_nunchuck(); //Get latest values from nunchuck
+    decode_nunchuck(false); //Get latest values from nunchuck
     //NEED TO ACTUALLY DO STUFF HERE
-    continue_check = !NUNCHUCK_C_BUTTON; //Continue until c_button is true (ie pressed)
+    continue_check = !(NUNCHUCK_C_BUTTON && NUNCHUCK_Z_BUTTON); //Continue until c+z buttons is true (ie both buttons held down together)
     
-    Serial.print("?f"); //Clear LCD
-    Serial.print("new_cal_1");
-    Serial.print("new_cal_2");
-    Serial.print("new_cal_3");
-    Serial.print("new_cal_4");
+    //Up
+    if(NUNCHUCK_Y_AXIS < 0)
+    {
+      changed = true;
+      new_cal_values[cur] += 1;
+      if(new_cal_values[cur] > 9) { new_cal_values[cur] = 0; }
+    }
+    //Down
+    else if(NUNCHUCK_Y_AXIS > 0)
+    {
+      changed = true;
+      new_cal_values[cur] -= 1;
+      if(new_cal_values[cur] < 0) { new_cal_values[cur] = 9; }      
+    }
+    
+    //Left
+    if(NUNCHUCK_X_AXIS < 0)
+    {
+      if(cur != 0) { cur -= 1; }
+    }
+    //Right
+    else if(NUNCHUCK_X_AXIS > 0)
+    {
+      if(cur != 3) { cur += 1; }
+    }
+    
+    
+    if(changed)
+    {
+      LCD_clear();
+      LCD_print_int(new_cal_values[0]);
+      LCD_print_int(new_cal_values[1]);
+      LCD_print_int(new_cal_values[2]);
+      LCD_print_int(new_cal_values[3]);
+      changed = false;
+    }
+  
+    delay(200); //Need a delay or else the nunchuck flips out
   }
   
   //Write the values back to the EEPROM only if they are different to the original values (Want to minimise the number of EEPROM writes)
-  if( cal_1 != new_cal_1 ) { EEPROM.write(0, new_cal_1); }
-  if( cal_2 != new_cal_2 ) { EEPROM.write(0, new_cal_2); }
-  if( cal_3 != new_cal_3 ) { EEPROM.write(0, new_cal_3); }
-  if( cal_4 != new_cal_4 ) { EEPROM.write(0, new_cal_4); }
+  if( cal_1 != new_cal_values[0] ) { EEPROM.write(0, new_cal_values[0]); }
+  if( cal_2 != new_cal_values[1] ) { EEPROM.write(1, new_cal_values[1]); }
+  if( cal_3 != new_cal_values[2] ) { EEPROM.write(2, new_cal_values[2]); }
+  if( cal_4 != new_cal_values[3] ) { EEPROM.write(3, new_cal_values[3]); }
   
-  //Set the CALIBRATOR value based on each new_cal value
-  CALIBRATOR = (new_cal_1 * 1000) + (new_cal_2 * 100) + (new_cal_3 * 10) + new_cal_4;
-
-  //EEPROM.write(address, value)
-  Serial.print("?c3"); //Set cursor to underline mode
-  Serial.print("?<"); //Exit big number mode
+  set_calibrator();
+  LCD_big_number_mode(false);
 }
 
 /*
@@ -468,7 +532,11 @@ void set_cursor_pos(int new_pos)
   CURSOR_POS = new_pos;
 }
 
-void decode_nunchuck()
+/*
+This function reads the status of the nunchuck controller
+If there has been changes since the last read, and do_updates is true, the relevant function will be called to update the cursor and lcd
+*/
+void decode_nunchuck(boolean do_updates)
 {
   int cnt = 0;
   uint8_t outbuf[6];
@@ -500,7 +568,7 @@ void decode_nunchuck()
   }
   else {NUNCHUCK_X_AXIS = 0; }//Center
   }
-  if(changed) { update_nunchuck_xaxis(); }
+  if(changed && do_updates) { update_nunchuck_xaxis(); }
 
   changed = false;
   //Y Axis Changes
@@ -519,7 +587,7 @@ void decode_nunchuck()
   }
   else {NUNCHUCK_Y_AXIS = 0; }//Center
   }
-  if(changed) { update_nunchuck_yaxis(); }
+  if(changed && do_updates) { update_nunchuck_yaxis(); }
   
   //Update for buttons
   // byte outbuf[5] contains bits for z and c buttons
@@ -534,7 +602,7 @@ void decode_nunchuck()
     changed = (NUNCHUCK_Z_BUTTON != true);
     NUNCHUCK_Z_BUTTON = true; 
   }
-  if(changed) { update_nunchuck_zbutton(); }
+  if(changed && do_updates) { update_nunchuck_zbutton(); }
   
   //C button
   changed = false;
