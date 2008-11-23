@@ -59,10 +59,9 @@ void setup()
   setup_lcd();
   delay(50);
   
-  
   //Do a check to see if the C button is held down, if it is, start the calibration routine
   decode_nunchuck(false);
-  delay(100);
+  //decode_nunchuck(false); //Not sure why but need to call this twice before it registers
   if(NUNCHUCK_C_BUTTON) { calibrate(); }
   //Attempt to set the calibrator number up, if this fails, run the calibration routine
   else if(!set_calibrator()) { calibrate(); }
@@ -82,6 +81,11 @@ void nunchuck_init ()
   Wire.beginTransmission (0x52);	// transmit to device 0x52
   Wire.send (0x40);		// sends memory address
   Wire.send (0x00);		// sends sent a zero.  
+  Wire.endTransmission ();	// stop transmitting
+  
+  delay(50);
+  Wire.beginTransmission (0x52);	// transmit to device 0x52
+  Wire.send (0x00);		// sends one byte
   Wire.endTransmission ();	// stop transmitting
 }
 
@@ -158,17 +162,11 @@ void calibrate()
   
   //We create some new cal values, initial value is simply the original ones
   int new_cal_values[] = {cal_1, cal_2, cal_3, cal_4};
-  /*
-  int new_cal_1 = cal_1;
-  int new_cal_2 = cal_2;
-  int new_cal_3 = cal_3;
-  int new_cal_4 = cal_4;
-  */
   
   int cur = 0; // Cursor position  
   //We run through a loop until the c button on the nunchuck is pressed
   boolean continue_check = true;
-  boolean changed = false;
+  boolean changed = true;
   while (continue_check)
   {
     decode_nunchuck(false); //Get latest values from nunchuck
