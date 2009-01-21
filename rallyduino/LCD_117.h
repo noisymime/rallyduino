@@ -24,9 +24,9 @@ LCD_print_string_with_coords(char *string, int x, int y) - Print a string at a g
 
 void LCD_clear()
 {
- Serial.print("?f");
- delay(100); 
-}
+ //Serial.print("?f");
+ delay(100);
+ }
 
 void LCD_set_custom_characters()
 {
