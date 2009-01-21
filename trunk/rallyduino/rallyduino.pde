@@ -53,6 +53,8 @@ int CURSOR_POS = 1;
 
 void setup()
 {
+  delay(3000);
+  
   Wire.begin ();		// join i2c bus with address 0x52
   nunchuck_init (); // send the initilization handshake  
   Serial.begin(9600);
@@ -68,11 +70,15 @@ void setup()
   
   draw_primary_headings();
   draw_secondary_headings();
-  //attachInterrupt(PROBE_PIN, pulse, RISING); //Attach the interrupt that gets called every time there is a pulse
-  //Use the Timer1 library to simulate pulses
-  Timer1.initialize(); // initialize timer1
-  Timer1.attachInterrupt(pulse, 8000); //Pulse every 8ms. Simulates 160km/h on 185/60R13 tire, 4 wheel studs
   
+  //Startup combination for simulation routine
+  if(NUNCHUCK_Z_BUTTON && (NUNCHUCK_Y_AXIS < 0))
+  {
+    //Use the Timer1 library to simulate pulses
+    Timer1.initialize(); // initialize timer1
+    Timer1.attachInterrupt(pulse, 8000); //Pulse every 8ms. Simulates 160km/h on 185/60R13 tire, 4 wheel studs
+  }
+  else {attachInterrupt(PROBE_PIN, pulse, RISING); } //Attach the interrupt that gets called every time there is a pulse 
   delay(50);
 }
 
