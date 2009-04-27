@@ -2,10 +2,19 @@
 #include <stdio.h>
 #include <Wire.h>
 #include <EEPROM.h>
+#include <string.h>
+#include "config.h"
 #include "floatToString.h"
 #include "TimerOne.h"
-#include "LCD_117.h"
 
+#include "LCD_117.h"
+#include "LCD_i2c.h"
+
+#define UP 0
+#define DOWN 2
+#define LEFT 0
+#define RIGHT 2
+#define CENTER 1
 #define PROBE_PIN 0 //Actually equals digital pin 2
 #define MM_IN_KM 1000000 // Number of mm in a kilometre
 #define MS_IN_HOUR 3600000 //Number of ms in an hour
@@ -37,8 +46,12 @@ boolean SHOW_TIME_COUNT2 = true; //Whether or not to show the time for count2. S
 //Nunchuck controller details:
 boolean NUNCHUCK_Z_BUTTON = false;
 boolean NUNCHUCK_C_BUTTON = false;
-int NUNCHUCK_X_AXIS = 0; // <0 = Left, 0 = Center, >0 = Right
-int NUNCHUCK_Y_AXIS = 0; // <0 = Up, 0 = Center, >0 = Down
+byte NUNCHUCK_X_AXIS = 0; // 0 = Left, 1 = Center, 2 = Right
+byte NUNCHUCK_Y_AXIS = 0; // 0 = Up, 1 = Center, 2 = Down
+byte NUNCHUCK_AXIS_THRESHOLD_MIN = 40; //Amount of movement against each axis that will trigger a move in the up and left directions (Max is 127, min 0). Higher number means more sensitive
+byte NUNCHUCK_AXIS_THRESHOLD_MAX = 210; //Amount of movement against each axis that will trigger a move in the down and right directions (Max is 129, min 256). Lower number means more sensitive
+
+LCD lcd; //Create an LCD object
 
 /*
 Cursor Positon map:
@@ -104,7 +117,7 @@ void loop()
   //process_input();
   
   LOOP_COUNTER++;
-  //We only do a screen redraw once every 20 loops
+  //We only do a screen redraw once every x loops
   //This means we get sufficiently up to date data displayed, but do not flood the LCD
   //Note that cursor movements / button presses still update frequently as they are part of decode_nunchuck()
   if( (LOOP_COUNTER % 30) == 0)
@@ -126,10 +139,10 @@ boolean set_calibrator()
 {
   //Attempt to get the calibration number from the EEPROM
   //the first 4 bytes of the EEPROM are used to store the 4 digits of a calibration figure in the range 0000-9999
-  int cal_1 = int( EEPROM.read(0) );
-  int cal_2 = int( EEPROM.read(1) );
-  int cal_3 = int( EEPROM.read(2) );
-  int cal_4 = int( EEPROM.read(3) );
+  byte cal_1 = byte( EEPROM.read(0) );
+  byte cal_2 = byte( EEPROM.read(1) );
+  byte cal_3 = byte( EEPROM.read(2) );
+  byte cal_4 = byte( EEPROM.read(3) );
   
   //Do a check to see if any of the retrieved values are greater than 9. If yes, this means that the EEPROM is virgin, never been used before
   //If this is the case, we reset the value to 0
@@ -150,14 +163,15 @@ boolean set_calibrator()
 //Runs through the calibration process
 void calibrate()
 {
-  LCD_big_number_mode(true);
+  
+  lcd.LCD_big_number_mode(true);
   
   //Attempt to get the calibration number from the EEPROM
   //the first 4 bytes of the EEPROM are used to store the 4 digits of a calibration figure in the range 0000-9999
-  int cal_1 = int( EEPROM.read(0) );
-  int cal_2 = int( EEPROM.read(1) );
-  int cal_3 = int( EEPROM.read(2) );
-  int cal_4 = int( EEPROM.read(3) );
+  byte cal_1 = byte( EEPROM.read(0) );
+  byte cal_2 = byte( EEPROM.read(1) );
+  byte cal_3 = byte( EEPROM.read(2) );
+  byte cal_4 = byte( EEPROM.read(3) );
   
   //Do a check to see if any of the retrieved values are greater than 9. This means that the EEPROM is virgin, never been used before
   //If this is the case, we reset the value to 0
@@ -167,12 +181,13 @@ void calibrate()
   if( cal_4 > 9) { cal_4 = 0; }
   
   //We create some new cal values, initial value is simply the original ones
-  int new_cal_values[] = {cal_1, cal_2, cal_3, cal_4};
+  byte new_cal_values[] = {cal_1, cal_2, cal_3, cal_4};
   
-  int cur = 0; // Cursor position  
+  byte cur = 0; // Cursor position  
   //We run through a loop until the c button on the nunchuck is pressed
   boolean continue_check = true;
   boolean changed = true;
+  
   while (continue_check)
   {
     decode_nunchuck(false); //Get latest values from nunchuck
@@ -180,14 +195,14 @@ void calibrate()
     continue_check = !(NUNCHUCK_C_BUTTON && NUNCHUCK_Z_BUTTON); //Continue until c+z buttons is true (ie both buttons held down together)
     
     //Up
-    if(NUNCHUCK_Y_AXIS < 0)
+    if(NUNCHUCK_Y_AXIS == UP)
     {
       changed = true;
       new_cal_values[cur] += 1;
       if(new_cal_values[cur] > 9) { new_cal_values[cur] = 0; }
     }
     //Down
-    else if(NUNCHUCK_Y_AXIS > 0)
+    else if(NUNCHUCK_Y_AXIS == DOWN)
     {
       changed = true;
       new_cal_values[cur] -= 1;
@@ -195,27 +210,26 @@ void calibrate()
     }
     
     //Left
-    if(NUNCHUCK_X_AXIS < 0)
+    if(NUNCHUCK_X_AXIS == LEFT)
     {
       if(cur != 0) { cur -= 1; }
     }
     //Right
-    else if(NUNCHUCK_X_AXIS > 0)
+    else if(NUNCHUCK_X_AXIS == RIGHT)
     {
       if(cur != 3) { cur += 1; }
-    }
-    
+    }  
     
     if(changed)
     {
-      LCD_clear();
-      LCD_print_int(new_cal_values[0]);
-      LCD_print_int(new_cal_values[1]);
-      LCD_print_int(new_cal_values[2]);
-      LCD_print_int(new_cal_values[3]);
+      lcd.LCD_clear();
+      lcd.LCD_print_int(new_cal_values[0]);
+      lcd.LCD_print_int(new_cal_values[1]);
+      lcd.LCD_print_int(new_cal_values[2]);
+      lcd.LCD_print_int(new_cal_values[3]);
       changed = false;
     }
-  
+    
     delay(200); //Need a delay or else the nunchuck flips out
   }
   
@@ -226,7 +240,8 @@ void calibrate()
   if( cal_4 != new_cal_values[3] ) { EEPROM.write(3, new_cal_values[3]); }
   
   set_calibrator();
-  LCD_big_number_mode(false);
+  lcd.LCD_big_number_mode(false);
+  
 }
 
 /*
@@ -252,8 +267,8 @@ void setup_lcd()
   ----------------------
   */
   
-  LCD_set_custom_characters();
-  LCD_clear();
+  lcd.LCD_set_custom_characters();
+  lcd.LCD_clear();
   
 }
 
@@ -266,14 +281,14 @@ void draw_primary_headings()
   //sprintf(headings1, "Dist1        %s", (SHOW_TIME_COUNT1?"  Time":"Avg.Sp"));
   if(SHOW_TIME_COUNT1) { strcpy(headings1, "Dist1          Time"); }
   else { strcpy(headings1, "Dist1        Avg.Sp"); }
-  LCD_print_string_with_coords(headings1, 0, 0);
+  lcd.LCD_print_string_with_coords(headings1, 0, 0);
   
   //Headings on 3rd row
   char headings2[20];
   if(SHOW_TIME_COUNT2) { strcpy(headings2, "Dist2          Time"); }
   else { strcpy(headings2, "Dist2        Avg.Sp"); }
-  LCD_print_string_with_coords(headings2, 0, 2);
-
+  lcd.LCD_print_string_with_coords(headings2, 0, 2);
+  
 }
 
 //Draws the headings on rows 2 and 4
@@ -286,8 +301,8 @@ void draw_secondary_headings()
   sprintf(heading2, "%s %s", (USE_MILES_COUNT1?"Mi":"Km"), (DIR_FORWARD_COUNT1?LCD_ARROW_UP:LCD_ARROW_DOWN));
   sprintf(heading4, "%s %s", (USE_MILES_COUNT2?"Mi":"Km"), (DIR_FORWARD_COUNT2?LCD_ARROW_UP:LCD_ARROW_DOWN));
   
-  LCD_print_string_with_coords(heading2, 7, 1);
-  LCD_print_string_with_coords(heading4, 7, 3);
+  lcd.LCD_print_string_with_coords(heading2, 7, 1);
+  lcd.LCD_print_string_with_coords(heading4, 7, 3);
 
 }
 
@@ -305,12 +320,12 @@ void redraw_lcd()
   char distance2_string[7];
   
   //Set position and print distance 1
-  floatToString(distance1_string, distance_1, 2);
-  LCD_print_string_with_coords(distance1_string, 0, 1);
+  //floatToString(distance1_string, distance_1, 2);
+  lcd.LCD_print_string_with_coords(distance1_string, 0, 1);
   
   //Set position and print distance 2  
-  floatToString(distance2_string, distance_2, 2);
-  LCD_print_string_with_coords(distance2_string, 0, 3);
+  //floatToString(distance2_string, distance_2, 2);
+  lcd.LCD_print_string_with_coords(distance2_string, 0, 3);
   
   //Calculate and print time or avg speed info
   //First get the current time in ms (Minus the last time the counter was reset)
@@ -327,7 +342,7 @@ void redraw_lcd()
     char cur_time1_str[9];
     
     sprintf(cur_time1_str, "%1d:%02d:%02d", hours1, mins1, secs1);
-    LCD_print_string_with_coords(cur_time1_str, 13, 1);
+    lcd.LCD_print_string_with_coords(cur_time1_str, 13, 1);
   }
   else
   {
@@ -336,8 +351,8 @@ void redraw_lcd()
     float avg_speed1 = float(distance_1) / float(hours1);
     
     char avg_speed1_string[7]; //String buffer for the result
-    floatToString(avg_speed1_string, avg_speed1, 2);
-    LCD_print_string_with_coords(avg_speed1_string, 14, 1);
+    //floatToString(avg_speed1_string, avg_speed1, 2);
+    lcd.LCD_print_string_with_coords(avg_speed1_string, 14, 1);
   }
   
   if(SHOW_TIME_COUNT2)
@@ -350,7 +365,7 @@ void redraw_lcd()
     char cur_time2_str[9];
   
     sprintf(cur_time2_str, "%1d:%02d:%02d", hours2, mins2, secs2);
-    LCD_print_string_with_coords(cur_time2_str, 13, 3);
+    lcd.LCD_print_string_with_coords(cur_time2_str, 13, 3);
   }
   else
   {
@@ -360,7 +375,7 @@ void redraw_lcd()
     
     char avg_speed2_string[7]; //String buffer for the result
     floatToString(avg_speed2_string, avg_speed2, 2);
-    LCD_print_string_with_coords(avg_speed2_string, 14, 3);
+    lcd.LCD_print_string_with_coords(avg_speed2_string, 14, 3);
   }
   
 }
@@ -376,12 +391,12 @@ Cursor Positon map:
   |   2    4   |       |
   ----------------------
 */
-  int new_pos = CURSOR_POS;
+  byte new_pos = CURSOR_POS;
   switch (NUNCHUCK_X_AXIS) {
-    case -1: //Left
+    case LEFT: //Left
       if(CURSOR_POS > 2) { new_pos = CURSOR_POS - 2; }
       break;
-    case 1: //Right
+    case RIGHT: //Right
       if(CURSOR_POS < 7) { new_pos = CURSOR_POS + 2; }
       break;
   } 
@@ -392,10 +407,10 @@ void update_nunchuck_yaxis()
 {
   int new_pos = CURSOR_POS;
   switch (NUNCHUCK_Y_AXIS) {
-    case -1: //Up
+    case UP: //Up
       if( (CURSOR_POS % 2) == 0 ) { new_pos = CURSOR_POS - 1; }
       break;
-    case 1: //Down
+    case DOWN: //Down
       if( (CURSOR_POS % 2) == 1 ) { new_pos = CURSOR_POS + 1; }
       break;
   }
@@ -404,6 +419,7 @@ void update_nunchuck_yaxis()
 
 void update_nunchuck_zbutton()
 {
+  
    //************************************************************************
   //Handle button presses
   if (NUNCHUCK_Z_BUTTON)
@@ -439,7 +455,7 @@ void update_nunchuck_zbutton()
         draw_primary_headings(); //Redraw headings do to change
         set_cursor_pos(CURSOR_POS);
         //Need to clear the first character from avg speed/time 
-        LCD_print_string_with_coords(" ", 13, 1);
+        lcd.LCD_print_string_with_coords(" ", 13, 1);
         break;
       case 8:
         //Switch count2 between time and average speed
@@ -447,11 +463,12 @@ void update_nunchuck_zbutton()
         draw_primary_headings(); //Redraw headings do to change
         set_cursor_pos(CURSOR_POS);
         //Need to clear the first character from avg speed/time 
-        LCD_print_string_with_coords(" ", 13, 3);
+        lcd.LCD_print_string_with_coords(" ", 13, 3);
         break;
-        
+    
     }
   } 
+  
 }
 
 void set_cursor_pos(int new_pos)
@@ -503,33 +520,33 @@ void set_cursor_pos(int new_pos)
        y = 2;
        break;
   }
-  LCD_print_string_with_coords(" ", x, y);
+  lcd.LCD_print_string_with_coords(" ", x, y);
   
   switch(new_pos)
   {
     case 1:
-      LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 1);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 1);
       break;
     case 2:
-      LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 3);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_RIGHT, 6, 3);
       break;
     case 3:
-      LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 0);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 0);
       break;
     case 4:
-      LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 2);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_DOWN, 7, 2);
       break;
     case 5:
-      LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 0);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 0);
       break;
     case 6:
-      LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 2);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_DOWN, 10, 2);
       break;
     case 7:
-      LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 0);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 0);
       break;
     case 8:
-      LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 2);
+      lcd.LCD_print_string_with_coords(LCD_ARROW_LEFT, 12, 2);
       break;
   }
   
@@ -542,9 +559,10 @@ If there has been changes since the last read, and do_updates is true, the relev
 */
 void decode_nunchuck(boolean do_updates)
 {
+  
   int cnt = 0;
   uint8_t outbuf[6];
-
+  
   Wire.requestFrom (0x52, 6);	// request data from nunchuck
   while (Wire.available ())
   {
@@ -558,38 +576,39 @@ void decode_nunchuck(boolean do_updates)
   int joy_x_axis = outbuf[0];
   int joy_y_axis = outbuf[1];
   
+  
   // X Axis changes
-  if (int(joy_x_axis) < 40) 
+  if (int(joy_x_axis) < NUNCHUCK_AXIS_THRESHOLD_MIN) 
   {
     changed = (NUNCHUCK_X_AXIS != -1);
-    NUNCHUCK_X_AXIS = -1; //Left
+    NUNCHUCK_X_AXIS = LEFT; //Left
   } 
   else {
-  if (int(joy_x_axis) > 215) 
+  if (int(joy_x_axis) > NUNCHUCK_AXIS_THRESHOLD_MAX) 
   {
     changed = (NUNCHUCK_X_AXIS != 1);
-    NUNCHUCK_X_AXIS = 1;  //Right
+    NUNCHUCK_X_AXIS = RIGHT;  //Right
   }
-  else {NUNCHUCK_X_AXIS = 0; }//Center
+  else {NUNCHUCK_X_AXIS = CENTER; }//Center
   }
   if(changed && do_updates) { update_nunchuck_xaxis(); }
-
+  
   changed = false;
   //Y Axis Changes
-  if (int(joy_y_axis) < 40) 
+  if (int(joy_y_axis) < NUNCHUCK_AXIS_THRESHOLD_MIN) 
   {
     //Down
     changed = (NUNCHUCK_Y_AXIS != 1);
-    NUNCHUCK_Y_AXIS = 1; 
+    NUNCHUCK_Y_AXIS = RIGHT; 
   } 
   else {
-  if (int(joy_y_axis) > 210) 
+  if (int(joy_y_axis) > NUNCHUCK_AXIS_THRESHOLD_MAX) 
   {
      //Up
     changed = (NUNCHUCK_Y_AXIS != -1);
-    NUNCHUCK_Y_AXIS = -1;
+    NUNCHUCK_Y_AXIS = LEFT;
   }
-  else {NUNCHUCK_Y_AXIS = 0; }//Center
+  else {NUNCHUCK_Y_AXIS = CENTER; }//Center
   }
   if(changed && do_updates) { update_nunchuck_yaxis(); }
   
@@ -606,7 +625,7 @@ void decode_nunchuck(boolean do_updates)
     changed = (NUNCHUCK_Z_BUTTON != true);
     NUNCHUCK_Z_BUTTON = true; 
   }
-  if(changed && do_updates) { update_nunchuck_zbutton(); }
+  //if(changed && do_updates) { update_nunchuck_zbutton(); }
   
   //C button
   changed = false;
@@ -625,7 +644,7 @@ void decode_nunchuck(boolean do_updates)
   Wire.beginTransmission (0x52);	// transmit to device 0x52
   Wire.send (0x00);		// sends one byte
   Wire.endTransmission ();	// stop transmitting
-
+  
  
 }
 
