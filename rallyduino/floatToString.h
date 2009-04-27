@@ -7,9 +7,12 @@
 //
 // If you don't save this as a .h, you will want to remove the default arguments
 //     uncomment this first line, and swap it for the next.  I don't think keyword arguments compile in .pde files
-
+#include <stdlib.h>
+#include <WProgram.h>
 //char * floatToString(char * outstr, float value, int places, int minwidth=, bool rightjustify) {
-char * floatToString(char * outstr, float value, int places, int minwidth=0, bool rightjustify=false) {
+//char * floatToString(char * outstr, float value, int places) {
+char * floatToString(char * outstr, float value, int places, int minwidth=0, bool rightjustify=false) 
+{
     // this is used to write a float value to string, outstr.  oustr is also the return value.
     int digit;
     float tens = 0.1;
