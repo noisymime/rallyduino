@@ -46,10 +46,13 @@ boolean SHOW_TIME_COUNT2 = true; //Whether or not to show the time for count2. S
 //Nunchuck controller details:
 boolean NUNCHUCK_Z_BUTTON = false;
 boolean NUNCHUCK_C_BUTTON = false;
-byte NUNCHUCK_X_AXIS = 0; // 0 = Left, 1 = Center, 2 = Right
-byte NUNCHUCK_Y_AXIS = 0; // 0 = Up, 1 = Center, 2 = Down
+byte NUNCHUCK_X_AXIS = CENTER;
+byte NUNCHUCK_Y_AXIS = CENTER;
 byte NUNCHUCK_AXIS_THRESHOLD_MIN = 40; //Amount of movement against each axis that will trigger a move in the up and left directions (Max is 127, min 0). Higher number means more sensitive
 byte NUNCHUCK_AXIS_THRESHOLD_MAX = 210; //Amount of movement against each axis that will trigger a move in the down and right directions (Max is 129, min 256). Lower number means more sensitive
+
+//Layout properties
+//byte DISTANCE1_X, DISTANCE1_Y, 
 
 LCD lcd; //Create an LCD object
 
@@ -85,7 +88,7 @@ void setup()
   draw_secondary_headings();
   
   //Startup combination for simulation routine
-  if(NUNCHUCK_Z_BUTTON && (NUNCHUCK_Y_AXIS < 0))
+  if(NUNCHUCK_Z_BUTTON && (NUNCHUCK_Y_AXIS == UP))
   {
     //Use the Timer1 library to simulate pulses
     Timer1.initialize(); // initialize timer1
@@ -265,6 +268,12 @@ void setup_lcd()
   |Count2         Time |
   |       mi   UD      |
   ----------------------
+  
+  or with 2x20:
+  ----------------------
+  |       mi   UD      |
+  |       mi   UD      |
+  ----------------------
   */
   
   lcd.LCD_set_custom_characters();
@@ -275,6 +284,9 @@ void setup_lcd()
 //Draws the headings on rows 1 and 3
 void draw_primary_headings()
 {
+  //Check LCD geometry. These headings are only printed if we have 4 rows
+  if(LCD_ROWS < 4) { return; }
+
   
   //Start Drawing headings
   char headings1[20];
@@ -301,8 +313,21 @@ void draw_secondary_headings()
   sprintf(heading2, "%s %s", (USE_MILES_COUNT1?"Mi":"Km"), (DIR_FORWARD_COUNT1?LCD_ARROW_UP:LCD_ARROW_DOWN));
   sprintf(heading4, "%s %s", (USE_MILES_COUNT2?"Mi":"Km"), (DIR_FORWARD_COUNT2?LCD_ARROW_UP:LCD_ARROW_DOWN));
   
-  lcd.LCD_print_string_with_coords(heading2, 7, 1);
-  lcd.LCD_print_string_with_coords(heading4, 7, 3);
+  int output_row1, output_row2, output_col;
+  output_col = 7;
+  if(LCD_ROWS < 4)
+  { 
+    output_row1 = 0;
+    output_row2 = 1;
+  }
+  else
+  {
+    output_row1 = 1;
+    output_row2 = 3;
+  }
+  
+  lcd.LCD_print_string_with_coords(heading2, output_col, output_row1);
+  lcd.LCD_print_string_with_coords(heading4, output_col, output_row2);
 
 }
 
@@ -320,11 +345,11 @@ void redraw_lcd()
   char distance2_string[7];
   
   //Set position and print distance 1
-  //floatToString(distance1_string, distance_1, 2);
+  floatToString(distance1_string, distance_1, 2);
   lcd.LCD_print_string_with_coords(distance1_string, 0, 1);
   
   //Set position and print distance 2  
-  //floatToString(distance2_string, distance_2, 2);
+  floatToString(distance2_string, distance_2, 2);
   lcd.LCD_print_string_with_coords(distance2_string, 0, 3);
   
   //Calculate and print time or avg speed info
@@ -351,7 +376,7 @@ void redraw_lcd()
     float avg_speed1 = float(distance_1) / float(hours1);
     
     char avg_speed1_string[7]; //String buffer for the result
-    //floatToString(avg_speed1_string, avg_speed1, 2);
+    floatToString(avg_speed1_string, avg_speed1, 2);
     lcd.LCD_print_string_with_coords(avg_speed1_string, 14, 1);
   }
   
@@ -598,15 +623,15 @@ void decode_nunchuck(boolean do_updates)
   if (int(joy_y_axis) < NUNCHUCK_AXIS_THRESHOLD_MIN) 
   {
     //Down
-    changed = (NUNCHUCK_Y_AXIS != 1);
-    NUNCHUCK_Y_AXIS = RIGHT; 
+    changed = (NUNCHUCK_Y_AXIS != UP);
+    NUNCHUCK_Y_AXIS = DOWN; 
   } 
   else {
   if (int(joy_y_axis) > NUNCHUCK_AXIS_THRESHOLD_MAX) 
   {
      //Up
-    changed = (NUNCHUCK_Y_AXIS != -1);
-    NUNCHUCK_Y_AXIS = LEFT;
+    changed = (NUNCHUCK_Y_AXIS != DOWN);
+    NUNCHUCK_Y_AXIS = UP;
   }
   else {NUNCHUCK_Y_AXIS = CENTER; }//Center
   }
@@ -625,7 +650,7 @@ void decode_nunchuck(boolean do_updates)
     changed = (NUNCHUCK_Z_BUTTON != true);
     NUNCHUCK_Z_BUTTON = true; 
   }
-  //if(changed && do_updates) { update_nunchuck_zbutton(); }
+  if(changed && do_updates) { update_nunchuck_zbutton(); }
   
   //C button
   changed = false;
