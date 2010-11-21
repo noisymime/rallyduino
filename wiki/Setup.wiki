@@ -14,3 +14,8 @@ The first and most important, is selecting which serial LCD controller you want 
 The other 2 options are simply to set the screen size (in characters) Currently the code will only reliably work with 20x4 displays, however 20x2 is also possible. 
 
 Once these options are set, simply compile and upload to your arduino. 
+
+= Configuration = 
+There are 2 'bootup' options available once the code is loaded onto the arduino. These are triggered by pressing certain buttons on the Wii controller and then powering the arduino. The current 2 options are:
+# Hold down the C button to enter the calibration screen. The number entered represents the distance the car will travel per pulse. Eg If your tire circumference is 1700mm and there are 4 wheel studs, the calibration number would be 1700/4 or 0425
+# Hold the Z button down and hold the joystick in the Up position. This will start a routine that simulates pulses at around 170km/h. This gives an overview of the functionality without needing a probe attached. 
