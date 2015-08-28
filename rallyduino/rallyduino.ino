@@ -6,6 +6,7 @@
 #include "config.h"
 #include "floatToString.h"
 #include "TimerOne.h"
+#include <stdlib.h>
 
 #include "LCD_117.h"
 #include "LCD_i2c.h"
@@ -71,8 +72,8 @@ void setup()
 {
   delay(3000);
   
-  Wire.begin ();		// join i2c bus with address 0x52
-  nunchuck_init (); // send the initilization handshake  
+  Wire.begin();		// join i2c bus with address 0x52
+  nunchuck_init(); // send the initilization handshake  
   Serial.begin(9600);
   setup_lcd();
   delay(50);
@@ -101,13 +102,13 @@ void setup()
 void nunchuck_init ()
 {
   Wire.beginTransmission (0x52);	// transmit to device 0x52
-  Wire.send (0x40);		// sends memory address
-  Wire.send (0x00);		// sends sent a zero.  
+  Wire.write((byte)0x40);		// sends memory address
+  Wire.write((byte)0x00);		// sends sent a zero.  
   Wire.endTransmission ();	// stop transmitting
   
   delay(50);
   Wire.beginTransmission (0x52);	// transmit to device 0x52
-  Wire.send (0x00);		// sends one byte
+  Wire.write((byte)0x00);		// sends one byte
   Wire.endTransmission ();	// stop transmitting
 }
 
@@ -345,6 +346,7 @@ void redraw_lcd()
   char distance2_string[7];
   
   //Set position and print distance 1
+  //dtostrf(distance_1,7,2,distance1_string);
   floatToString(distance1_string, distance_1, 2);
   lcd.LCD_print_string_with_coords(distance1_string, 0, 1);
   
@@ -591,7 +593,7 @@ void decode_nunchuck(boolean do_updates)
   Wire.requestFrom (0x52, 6);	// request data from nunchuck
   while (Wire.available ())
   {
-    outbuf[cnt] = (Wire.receive()^0x17) + 0x17; //Receive and decode 1 byte //nunchuk_decode_byte (Wire.receive ());
+    outbuf[cnt] = (Wire.read()^0x17) + 0x17; //Receive and decode 1 byte //nunchuk_decode_byte (Wire.receive ());
     cnt++;
   }
   
@@ -667,7 +669,7 @@ void decode_nunchuck(boolean do_updates)
 
 
   Wire.beginTransmission (0x52);	// transmit to device 0x52
-  Wire.send (0x00);		// sends one byte
+  Wire.write((byte)0x00);		// sends one byte
   Wire.endTransmission ();	// stop transmitting
   
  

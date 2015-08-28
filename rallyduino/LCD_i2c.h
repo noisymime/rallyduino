@@ -18,7 +18,6 @@ LCD_print_int - Print an int
 
 
 #include "WConstants.h"
-//#include <WProgram.h> 
 
 //Macros
 #define LCD_PRINT_ARROW_UP() Serial.print("?1"); delay(50);

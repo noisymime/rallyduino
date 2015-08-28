@@ -16,7 +16,7 @@ LCD_print_int - Print an int
 #include "config.h"
 #ifdef lcd_117_h
 
-#include "WProgram.h"
+//#include "WProgram.h"
 #include "LCD_117.h"
 
 LCD::LCD()

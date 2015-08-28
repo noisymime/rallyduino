@@ -16,7 +16,8 @@ LCD_print_int - Print an int
 #ifdef lcd_117_h
 
 
-#include "WConstants.h"
+//#include "WConstants.h"
+#include "Arduino.h"
 #include <stdio.h>
 //#include <WProgram.h> 
 
