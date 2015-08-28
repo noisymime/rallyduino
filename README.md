@@ -17,4 +17,4 @@ Serial LCD adaptor based on Peter Anderson's command set. These units are availa
 An i2c LCD controller compatible with this library http://www.wentztech.com/radio/arduino/files/LCDI2C.html. This is currently experimental, but will likely be the preferred interface in the future
 A Wii nunchuck (Preferably with an extension cable so you don't have to mutilate your controller)
 Some way to connect all the above together (ie breadboard or arduino prototyping shield and a bunch of wire)
-Instructions on how to setup the device can be found at: http://code.google.com/p/rallyduino/wiki/Setup
+Instructions on how to setup the device can be found at: https://github.com/noisymime/rallyduino/wiki/Setup
